@@ -133,7 +133,7 @@
 
         <div id="online-menu" class="online-panel">
           <p class="online-desc">Play with friends in real time. Create a room and share the code, or join an existing room.</p>
-          <p class="form-hint online-host-hint">Multiplayer requires the game server. Use <strong>http://localhost:3000</strong> after <code>npm start</code> — GitHub Pages alone cannot run online mode.</p>
+          <p class="form-hint online-host-hint">Works on this site — create a room and share the 4-letter code. Friends open the same link to join.</p>
           <div class="online-name-row">
             <label for="online-player-name">Your name</label>
             <input type="text" id="online-player-name" maxlength="12" placeholder="Enter your name" value="You">
@@ -327,9 +327,11 @@
     </div>
   </div>
 
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="config.js"></script>
+  <script src="server/game-engine.js"></script>
   <script src="characters.js?v=4"></script>
   <script src="game.js?v=10"></script>
-  <script src="online.js?v=3"></script>
+  <script src="online.js?v=4"></script>
 </body>
 </html>

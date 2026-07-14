@@ -505,7 +505,7 @@ function runBotTurn() {
   return { ok: false };
 }
 
-module.exports = {
+const UnoEngineAPI = {
   COLORS,
   createGame,
   playCard,
@@ -520,3 +520,10 @@ module.exports = {
   checkSoleSurvivor,
   activeHumanCount
 };
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = UnoEngineAPI;
+}
+if (typeof window !== 'undefined') {
+  window.UnoEngine = UnoEngineAPI;
+}

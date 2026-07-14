@@ -65,8 +65,6 @@ const TURN_HANDOFF_DELAY = 320;
 const HUMAN_DRAW_ANIM_DELAY = 580;
 const CARD_FLIGHT_MS = 580;
 const CARD_DRAW_STAGGER = 110;
-/** Faster flights for multiplayer so opponent moves register immediately */
-const ONLINE_FLIGHT_MS = 280;
 
 let pendingForceDraws = [];
 
@@ -189,12 +187,7 @@ function getTopCard() {
 }
 
 function canPlayCard(card, activeColor, topCard) {
-  if (card.color === 'wild') {
-    if (card.value === 'wild4') {
-      return !hasMatchingColor(state.players[state.currentPlayer].hand, activeColor);
-    }
-    return true;
-  }
+  if (card.color === 'wild') return true;
   if (card.color === activeColor) return true;
   if (topCard.color !== 'wild' && card.value === topCard.value) return true;
   return false;
@@ -444,8 +437,13 @@ async function handleHumanDrawClick() {
 
   if (onlineMode) {
     if (state.phase !== 'playing' && state.phase !== 'drawn_playable') return;
-    if (window.OnlineClient) window.OnlineClient.sendDraw();
-    if (state.phase === 'playing') void animateHumanDrawOnline();
+    humanActionLock = true;
+    try {
+      if (state.phase === 'playing') await animateHumanDraw();
+      if (window.OnlineClient) window.OnlineClient.sendDraw();
+    } finally {
+      humanActionLock = false;
+    }
     return;
   }
 
@@ -764,10 +762,10 @@ async function animateDrawFromDeck(playerIndex) {
   });
 }
 
-async function animatePlayToDiscard(card, sourceEl, duration = CARD_FLIGHT_MS) {
+async function animatePlayToDiscard(card, sourceEl) {
   const discardEl = document.getElementById('top-card') || document.getElementById('discard-pile');
   if (!discardEl) {
-    await delay(duration);
+    await delay(CARD_FLIGHT_MS);
     return;
   }
 
@@ -780,46 +778,12 @@ async function animatePlayToDiscard(card, sourceEl, duration = CARD_FLIGHT_MS) {
   const fromRotate = getCardRotate(sourceEl);
 
   await flyCardElement(flyCard, fromRect, toRect, {
-    duration,
+    duration: CARD_FLIGHT_MS,
     arcHeight: 52,
     fromScale: 1,
     toScale: 1,
     fromRotate,
     toRotate: 0
-  });
-}
-
-async function animateHumanDrawOnline() {
-  pulseDrawPile();
-  const drawEl = document.querySelector('#draw-pile .card-back') || document.getElementById('draw-pile');
-  const targetEl = getAnimAnchorEl(0) || getPlayerTargetEl(0);
-  if (!drawEl || !targetEl) return;
-  const { w, h } = getCardDimensions();
-  const flyCard = createCardBackElement();
-  await flyCardElement(flyCard, drawEl.getBoundingClientRect(), targetEl.getBoundingClientRect(), {
-    duration: ONLINE_FLIGHT_MS,
-    arcHeight: 36,
-    fromScale: 0.82,
-    toScale: 1,
-    fromRotate: -6,
-    toRotate: 6,
-    cardW: w,
-    cardH: h
-  });
-}
-
-async function animateOnlineOpponentPlay(playerIndex, card) {
-  const anchorEl = getAnimAnchorEl(playerIndex);
-  const discardEl = document.getElementById('top-card') || document.getElementById('discard-pile');
-  if (!anchorEl || !discardEl || !card) return;
-  const flyCard = createCardElement(card);
-  await flyCardElement(flyCard, anchorEl.getBoundingClientRect(), discardEl.getBoundingClientRect(), {
-    duration: ONLINE_FLIGHT_MS,
-    arcHeight: 32,
-    fromScale: 0.78,
-    toScale: 1,
-    fromRotate: -12,
-    toRotate: 2
   });
 }
 
@@ -997,20 +961,14 @@ async function handleHumanPlay(cardId) {
   const sourceEl = document.querySelector(`#player-hand .card[data-id="${cardId}"]`);
   if (sourceEl) sourceEl.classList.add('card-leaving');
 
-  if (onlineMode) {
-    try {
-      if (window.OnlineClient) window.OnlineClient.sendPlay(cardId, null);
-      void animatePlayToDiscard(card, sourceEl, ONLINE_FLIGHT_MS);
-    } finally {
-      humanActionLock = false;
-    }
-    return;
-  }
-
   try {
     await animatePlayToDiscard(card, sourceEl);
-    playCard(0, cardId);
-    render();
+    if (onlineMode) {
+      if (window.OnlineClient) window.OnlineClient.sendPlay(cardId, null);
+    } else {
+      playCard(0, cardId);
+      render();
+    }
   } finally {
     humanActionLock = false;
   }
@@ -1034,21 +992,15 @@ async function handleColorChoice(color) {
   const sourceEl = document.querySelector(`#player-hand .card[data-id="${card.id}"]`);
   if (sourceEl) sourceEl.classList.add('card-leaving');
 
-  if (onlineMode) {
-    try {
-      state.phase = 'playing';
-      if (window.OnlineClient) window.OnlineClient.sendPlay(card.id, color);
-      void animatePlayToDiscard(card, sourceEl, ONLINE_FLIGHT_MS);
-    } finally {
-      humanActionLock = false;
-    }
-    return;
-  }
-
   try {
     await animatePlayToDiscard(card, sourceEl);
-    playCard(0, card.id, color);
-    render();
+    if (onlineMode) {
+      state.phase = 'playing';
+      if (window.OnlineClient) window.OnlineClient.sendPlay(card.id, color);
+    } else {
+      playCard(0, card.id, color);
+      render();
+    }
   } finally {
     humanActionLock = false;
   }
@@ -1506,15 +1458,21 @@ document.getElementById('color-modal').addEventListener('click', e => {
 // ===== Online multiplayer bridge =====
 
 let lastOnlineEventKey = null;
+let onlineViewChain = Promise.resolve();
 
 function applyOnlineView(view, event = null) {
+  onlineViewChain = onlineViewChain
+    .then(() => applyOnlineViewAsync(view, event))
+    .catch(err => console.error('Online view apply failed', err));
+}
+
+async function applyOnlineViewAsync(view, event = null) {
   onlineMode = true;
   const n = view.playerCount || view.players?.length || 4;
   const you = view.youIndex >= 0 ? view.youIndex : 0;
   mySeat = you;
 
   botSessionActive = false;
-  humanActionLock = false;
   if (turnScheduleTimer) {
     clearTimeout(turnScheduleTimer);
     turnScheduleTimer = null;
@@ -1524,21 +1482,43 @@ function applyOnlineView(view, event = null) {
   const eventKey = last && view.seq != null
     ? `${view.seq}:${last.kind}:${last.playerIndex}`
     : null;
-  const shouldFx = !!(
+
+  const canAnimate = !!(
     last
     && eventKey
     && eventKey !== lastOnlineEventKey
     && state
     && document.getElementById('game-screen')?.classList.contains('active')
   );
-  const relActor = last
-    ? ((last.playerIndex - you) % n + n) % n
-    : 0;
-  const playedCard = last?.kind === 'play' ? last.card : null;
-  const remotePlay = shouldFx && last.playerIndex !== you && last.kind === 'play' && playedCard;
 
-  // Apply board state immediately — never wait on animations
+  // Same flights as vs-computer for remote players (and forced draws)
+  if (canAnimate) {
+    const rel = ((last.playerIndex - you) % n + n) % n;
+    if (last.playerIndex !== you) {
+      if (last.kind === 'play' && last.card) {
+        const name = view.players[last.playerIndex]?.name || 'Opponent';
+        showMessage(`${name} plays a card`);
+        await animateBotPlay(rel, last.card);
+      } else if (last.kind === 'draw') {
+        const name = view.players[last.playerIndex]?.name || 'Opponent';
+        showMessage(`${name} draws a card`);
+        await animateBotDraw(rel);
+      }
+    }
+
+    if (last.forceDraws?.length) {
+      for (const fd of last.forceDraws) {
+        const fdRel = ((fd.playerIndex - you) % n + n) % n;
+        for (let i = 0; i < (fd.count || 0); i++) {
+          await animateDrawFromDeck(fdRel);
+          if (i < fd.count - 1) await delay(CARD_DRAW_STAGGER);
+        }
+      }
+    }
+  }
   if (eventKey) lastOnlineEventKey = eventKey;
+
+  humanActionLock = false;
 
   const players = [];
   for (let i = 0; i < n; i++) {
@@ -1571,13 +1551,6 @@ function applyOnlineView(view, event = null) {
     ? players[0].hand.find(c => c.id === view.drawnCardId) || null
     : null;
 
-  // Keep previous top card briefly for remote play flight; avoid double flash after
-  if (remotePlay) {
-    lastRenderedTopId = view.topCard?.id || lastRenderedTopId;
-  } else if (view.topCard?.id) {
-    lastRenderedTopId = view.topCard.id;
-  }
-
   state = {
     deck: Array(Math.max(0, view.deckCount || 0)).fill({ id: 'deck' }),
     discardPile: [view.topCard],
@@ -1596,17 +1569,12 @@ function applyOnlineView(view, event = null) {
     onlineSeq: view.seq
   };
 
+  if (view.topCard?.id) lastRenderedTopId = view.topCard.id;
+
   showScreen('game');
   render();
 
   if (view.message) showMessage(view.message);
-
-  // Cosmetic only — must not delay board registration
-  if (remotePlay) {
-    void animateOnlineOpponentPlay(relActor, playedCard);
-  } else if (shouldFx && last.playerIndex !== you && last.kind === 'draw') {
-    pulseDrawPile();
-  }
 
   if (view.pendingWild && view.phase === 'awaiting_color') {
     const wild = players[0].hand.find(c => c.color === 'wild');

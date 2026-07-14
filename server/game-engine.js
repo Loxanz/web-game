@@ -52,12 +52,7 @@ function hasMatchingColor(hand, color) {
 function canPlayCard(state, card, playerIndex) {
   const top = state.discardPile[state.discardPile.length - 1];
   const activeColor = state.activeColor;
-  if (card.color === 'wild') {
-    if (card.value === 'wild4') {
-      return !hasMatchingColor(state.players[playerIndex].hand, activeColor);
-    }
-    return true;
-  }
+  if (card.color === 'wild') return true;
   if (card.color === activeColor) return true;
   if (top.color !== 'wild' && card.value === top.value) return true;
   return false;

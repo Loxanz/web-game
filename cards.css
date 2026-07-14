@@ -1,0 +1,382 @@
+/* Classic UNO card artwork — official-style colors & layout */
+
+:root {
+  --uno-red:    #e8181e;
+  --uno-blue:   #006bb6;
+  --uno-green:  #35a846;
+  --uno-yellow: #f8d021;
+  --uno-black:  #111111;
+}
+
+/* Outer white frame */
+.card {
+  width: var(--card-w);
+  height: var(--card-h);
+  padding: 5px;
+  background: #ffffff !important;
+  border-radius: 11px;
+  position: relative;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  transition: transform 0.25s cubic-bezier(0.34, 1.2, 0.64, 1), box-shadow 0.25s;
+  user-select: none;
+  flex-shrink: 0;
+  border: none !important;
+  box-sizing: border-box;
+  overflow: hidden;
+  isolation: isolate;
+  contain: paint;
+}
+
+.card::after {
+  display: none !important;
+}
+
+/* Colored inner face */
+.card-face {
+  width: 100%;
+  height: 100%;
+  min-height: calc(var(--card-h) - 10px);
+  border-radius: 7px;
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.card-face.red    { background-color: #e8181e !important; }
+.card-face.yellow { background-color: #f8d021 !important; }
+.card-face.green  { background-color: #35a846 !important; }
+.card-face.blue   { background-color: #006bb6 !important; }
+.card-face.black  { background-color: #111111 !important; }
+
+/* Tilted white oval */
+.card-oval {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 74%;
+  height: 84%;
+  transform: translate(-50%, -50%) rotate(-32deg);
+  border: 2.5px solid #ffffff;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Corners — kept inside face, no escape stacking */
+.corner {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  max-width: 28%;
+  max-height: 22%;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.corner-tl { top: 8%; left: 7%; }
+.corner-br { bottom: 8%; right: 7%; transform: rotate(180deg); }
+
+/* Center art area */
+.card-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 58%;
+  height: 62%;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* ── Numbers ── */
+.uno-num {
+  font-family: 'Arial Black', 'Helvetica Neue', Arial, sans-serif;
+  font-weight: 900;
+  color: #ffffff;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  text-shadow: 2px 2px 0 #000000;
+}
+
+.card-center .uno-num { font-size: 2.2rem; }
+.corner .uno-num       { font-size: 0.72rem; }
+
+/* ── SVG action icons ── */
+.uno-icon {
+  display: block;
+  overflow: visible;
+}
+
+.corner .uno-icon       { width: 13px; height: 13px; }
+.card-center .uno-icon  { width: 34px; height: 34px; }
+
+.icon-shadow {
+  filter: drop-shadow(1px 1px 0 #000);
+}
+
+/* ── +2 / +4 text ── */
+.uno-action-text {
+  font-family: 'Arial Black', 'Helvetica Neue', Arial, sans-serif;
+  font-weight: 900;
+  color: #ffffff;
+  line-height: 1;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.corner .uno-action-text       { font-size: 0.7rem; }
+.card-center .uno-action-text  { font-size: 1.4rem; }
+
+/* Draw Two — two overlapping white cards */
+.draw2-stack {
+  position: relative;
+  width: 36px;
+  height: 44px;
+}
+
+.draw2-stack .dc {
+  position: absolute;
+  width: 28px;
+  height: 36px;
+  background: #ffffff;
+  border: 2px solid #000000;
+  border-radius: 3px;
+  box-shadow: 2px 2px 0 #000;
+}
+
+.draw2-stack .dc:first-child { top: 0; left: 0;  transform: rotate(-10deg); }
+.draw2-stack .dc:last-child  { top: 7px; left: 9px; transform: rotate(8deg); }
+
+/* Wild — four-color corner dot */
+.wild-dot {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid #fff;
+  background: conic-gradient(
+    var(--uno-red)    0deg 90deg,
+    var(--uno-blue)   90deg 180deg,
+    var(--uno-yellow) 180deg 270deg,
+    var(--uno-green)  270deg 360deg
+  );
+  box-shadow: 1px 1px 0 #000;
+}
+
+/* Wild — WILD word */
+.wild-center {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wild-swoosh {
+  position: absolute;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--uno-red)    0deg 90deg,
+    var(--uno-blue)   90deg 180deg,
+    var(--uno-yellow) 180deg 270deg,
+    var(--uno-green)  270deg 360deg
+  );
+  transform: rotate(-15deg);
+  z-index: 0;
+}
+
+.wild-word {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  transform: rotate(-32deg);
+  font-family: 'Arial Black', 'Helvetica Neue', Arial, sans-serif;
+  font-weight: 900;
+  font-size: 1rem;
+  letter-spacing: -0.03em;
+  filter: drop-shadow(3px 3px 0 #000);
+}
+
+.wild-word span {
+  color: #fff;
+  -webkit-text-stroke: 2px #000;
+  paint-order: stroke fill;
+}
+
+.wild-word .w-w { -webkit-text-stroke-color: var(--uno-red); }
+.wild-word .w-i { -webkit-text-stroke-color: var(--uno-blue); }
+.wild-word .w-l { -webkit-text-stroke-color: var(--uno-green); }
+.wild-word .w-d { -webkit-text-stroke-color: var(--uno-yellow); }
+
+/* Wild Draw Four — fanned mini cards */
+.wild4-stack {
+  position: relative;
+  width: 42px;
+  height: 42px;
+}
+
+.w4 {
+  position: absolute;
+  width: 17px;
+  height: 24px;
+  border-radius: 2px;
+  border: 1.5px solid rgba(0,0,0,0.55);
+  box-shadow: 1px 1px 0 rgba(0,0,0,0.7);
+}
+
+.w4:nth-child(1) { background: var(--uno-green);  bottom: 0;  left: 0;  transform: rotate(-20deg); z-index: 1; }
+.w4:nth-child(2) { background: var(--uno-blue);   bottom: 4px; left: 10px; transform: rotate(-7deg);  z-index: 2; }
+.w4:nth-child(3) { background: var(--uno-red);    bottom: 8px; left: 20px; transform: rotate(7deg);   z-index: 3; }
+.w4:nth-child(4) { background: var(--uno-yellow); bottom: 12px; left: 29px; transform: rotate(18deg);  z-index: 4; }
+
+/* ── Card back ── */
+.card.card-back {
+  padding: 5px;
+  background: #ffffff !important;
+}
+
+.card-back .card-face {
+  background: #111 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-back .card-face::before {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border: 2px solid rgba(255,255,255,0.18);
+  border-radius: 5px;
+}
+
+.card-back .card-face::after {
+  display: block !important;
+  content: '';
+  position: absolute;
+  width: 68%;
+  height: 52%;
+  border: 2px solid rgba(255,255,255,0.22);
+  border-radius: 50%;
+  transform: rotate(-28deg);
+  background: none !important;
+}
+
+.uno-logo-small {
+  position: relative;
+  z-index: 2;
+  font-family: 'Arial Black', Arial, sans-serif;
+  font-size: 0.9rem;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: -0.05em;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  background: none !important;
+  text-shadow: 2px 2px 0 var(--uno-red), -1px -1px 0 var(--uno-yellow);
+}
+
+/* ── Realistic fanned hand ── */
+.player-hand {
+  align-items: flex-end;
+  perspective: 900px;
+  --card-overlap: -18px;
+}
+
+.player-hand .card {
+  cursor: pointer;
+  margin-left: var(--card-overlap, -18px);
+  position: relative;
+  transform-origin: center bottom;
+  transform: rotate(var(--card-rotate, 0deg));
+  z-index: var(--card-z, 1);
+  will-change: transform;
+}
+
+.player-hand .card:first-child { margin-left: 0; }
+
+.player-hand .card .corner {
+  pointer-events: none;
+}
+
+.player-hand .card .card-center {
+  z-index: 2;
+}
+
+.player-hand .card:hover {
+  transform: translateY(-22px) scale(1.06) rotate(var(--card-rotate, 0deg));
+  z-index: 100 !important;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.5);
+}
+
+.player-hand .card.playable {
+  box-shadow: 0 0 0 2px var(--uno-green), 0 0 12px rgba(53, 168, 70, 0.45), 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.player-hand .card.playable:hover {
+  box-shadow: 0 0 0 2px var(--uno-green), 0 0 18px rgba(53, 168, 70, 0.55), 0 14px 32px rgba(0, 0, 0, 0.5);
+}
+
+.player-hand .card.not-playable { opacity: 0.65; }
+
+.player-hand .card.card-leaving {
+  opacity: 0 !important;
+  transform: scale(0.92) !important;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  pointer-events: none;
+}
+
+.player-hand .card.just-drawn {
+  animation: card-draw-in 0.55s cubic-bezier(0.34, 1.15, 0.45, 1);
+}
+
+@keyframes card-draw-in {
+  0%   { transform: translateY(-28px) scale(0.82) rotate(0deg); opacity: 0.4; }
+  60%  { transform: translateY(-6px) scale(1.04) rotate(var(--card-rotate, 0deg)); opacity: 1; }
+  100% { transform: translateY(0) scale(1) rotate(var(--card-rotate, 0deg)); opacity: 1; }
+}
+
+.card.play-animation {
+  animation: card-play-in 0.45s cubic-bezier(0.34, 1.15, 0.45, 1);
+}
+
+@keyframes card-play-in {
+  0%   { transform: scale(0.88); opacity: 0.85; }
+  55%  { transform: scale(1.08); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+#top-card.discard-flash {
+  animation: discard-flash 0.45s ease-out;
+}
+
+@keyframes discard-flash {
+  0%   { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+/* ── Opponent mini backs ── */
+.opponent-cards .mini-card {
+  background: #111 !important;
+  border: 2px solid #fff !important;
+  border-radius: 3px;
+}
+
+/* ── Responsive card art ── */
+@media (max-width: 700px) {
+  .card-center .uno-num { font-size: 2rem; }
+  .card-center .uno-icon { width: 32px; height: 32px; }
+  .wild-word { font-size: 0.85rem; }
+}
+
+@media (max-width: 480px) {
+  .card-center .uno-num { font-size: 1.7rem; }
+  .card-center .uno-icon { width: 28px; height: 28px; }
+}

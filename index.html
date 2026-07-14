@@ -133,6 +133,7 @@
 
         <div id="online-menu" class="online-panel">
           <p class="online-desc">Play with friends in real time. Create a room and share the code, or join an existing room.</p>
+          <p class="form-hint online-host-hint">Multiplayer requires the game server. Use <strong>http://localhost:3000</strong> after <code>npm start</code> — GitHub Pages alone cannot run online mode.</p>
           <div class="online-name-row">
             <label for="online-player-name">Your name</label>
             <input type="text" id="online-player-name" maxlength="12" placeholder="Enter your name" value="You">
@@ -155,7 +156,7 @@
               <span id="lobby-code" class="lobby-code">----</span>
               <button type="button" id="btn-copy-code" class="btn btn-ghost btn-sm">Copy</button>
             </div>
-            <p class="form-hint">Share this code with friends (2–4 players). Empty seats fill with AI when you start.</p>
+            <p class="form-hint">Share this code with friends (2–4 players). Only people in the room play — no AI.</p>
           </div>
           <div id="lobby-players" class="lobby-players"></div>
           <p id="lobby-hint" class="online-status"></p>
@@ -328,6 +329,6 @@
 
   <script src="characters.js?v=4"></script>
   <script src="game.js?v=10"></script>
-  <script src="online.js?v=1"></script>
+  <script src="online.js?v=2"></script>
 </body>
 </html>

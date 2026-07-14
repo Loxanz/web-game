@@ -120,40 +120,28 @@ function drawCards(state, player, count) {
 }
 
 /**
- * Build initial game from lobby seats.
- * seats: [{ name, avatar, clientId|null, isBot }] length 2–4
- * Always pads to 4 with bots.
+ * Build initial game from lobby seats (humans only, 2–4 players).
+ * seats: [{ name, avatar, clientId, isBot? }]
  */
 function createGame(seats) {
+  if (!seats || seats.length < 2 || seats.length > 4) {
+    throw new Error('Need 2–4 players');
+  }
+
   cardIdCounter = 0;
   let deck = shuffle(createDeck());
+  const n = seats.length;
 
-  const players = [];
-  for (let i = 0; i < 4; i++) {
-    if (i < seats.length) {
-      const s = seats[i];
-      players.push({
-        name: s.name,
-        hand: [],
-        isHuman: !s.isBot,
-        isBot: !!s.isBot,
-        clientId: s.clientId || null,
-        unoCalled: false,
-        character: s.avatar || { color: '#4361ee' }
-      });
-    } else {
-      const botName = BOT_NAMES[i - seats.length] || `Bot${i}`;
-      players.push({
-        name: botName,
-        hand: [],
-        isHuman: false,
-        isBot: true,
-        clientId: null,
-        unoCalled: false,
-        character: { color: ['#4361ee', '#35a846', '#e8181e'][(i - 1) % 3] }
-      });
-    }
-  }
+  const players = seats.map(s => ({
+    name: s.name,
+    hand: [],
+    isHuman: true,
+    isBot: false,
+    disconnected: false,
+    clientId: s.clientId || null,
+    unoCalled: false,
+    character: s.avatar || { color: '#4361ee' }
+  }));
 
   for (let i = 0; i < 7; i++) {
     for (const player of players) {
@@ -176,14 +164,19 @@ function createGame(seats) {
   let message = 'Game started!';
 
   if (topCard.value === 'skip') {
-    currentPlayer = nextPlayerIndex(0, direction, 4);
+    currentPlayer = nextPlayerIndex(0, direction, n);
     message = 'First card: Skip!';
   } else if (topCard.value === 'reverse') {
     direction = -1;
-    message = 'First card: Reverse!';
+    if (n === 2) {
+      currentPlayer = 0;
+      message = 'First card: Reverse! (acts as Skip in 2-player)';
+    } else {
+      message = 'First card: Reverse!';
+    }
   } else if (topCard.value === 'draw2') {
     drawCards({ deck, discardPile }, players[0], 2);
-    currentPlayer = nextPlayerIndex(0, direction, 4);
+    currentPlayer = nextPlayerIndex(0, direction, n);
     message = 'First card: Draw Two!';
   }
 
@@ -200,12 +193,40 @@ function createGame(seats) {
     pendingWildCardId: null,
     forceQueue,
     message,
-    seq: 0
+    seq: 0,
+    lastEvent: null
   };
 }
 
+function seatCount(state) {
+  return state.players.length;
+}
+
+function activeHumanCount(state) {
+  return state.players.filter(p => !p.disconnected).length;
+}
+
 function advance(state) {
-  state.currentPlayer = nextPlayerIndex(state.currentPlayer, state.direction, 4);
+  const n = seatCount(state);
+  let next = nextPlayerIndex(state.currentPlayer, state.direction, n);
+  let guard = 0;
+  while (state.players[next]?.disconnected && guard++ < n) {
+    next = nextPlayerIndex(next, state.direction, n);
+  }
+  state.currentPlayer = next;
+}
+
+function checkSoleSurvivor(state) {
+  const alive = state.players.filter(p => !p.disconnected);
+  if (alive.length === 1) {
+    const winnerIndex = state.players.indexOf(alive[0]);
+    state.winnerIndex = winnerIndex;
+    state.winner = alive[0].name;
+    state.phase = 'game_over';
+    state.message = `${alive[0].name} wins! (others left)`;
+    return true;
+  }
+  return false;
 }
 
 function applyForceDraws(state) {
@@ -218,6 +239,9 @@ function applyForceDraws(state) {
 
 function resolveEffects(state, card, playerIndex) {
   const actor = state.players[playerIndex]?.name || 'Player';
+  const n = seatCount(state);
+  const forceEvents = [];
+
   switch (card.value) {
     case 'skip':
       advance(state);
@@ -226,13 +250,19 @@ function resolveEffects(state, card, playerIndex) {
       break;
     case 'reverse':
       state.direction *= -1;
-      state.message = 'Direction reversed!';
-      advance(state);
+      state.message = n === 2 ? 'Reverse! (Skip in 2-player)' : 'Direction reversed!';
+      if (n === 2) {
+        advance(state);
+        advance(state);
+      } else {
+        advance(state);
+      }
       break;
     case 'draw2': {
       advance(state);
       const target = state.currentPlayer;
       state.forceQueue.push({ playerIndex: target, count: 2 });
+      forceEvents.push({ playerIndex: target, count: 2 });
       state.message = `${state.players[target].name} draws 2 cards.`;
       advance(state);
       break;
@@ -245,6 +275,7 @@ function resolveEffects(state, card, playerIndex) {
       advance(state);
       const target = state.currentPlayer;
       state.forceQueue.push({ playerIndex: target, count: 4 });
+      forceEvents.push({ playerIndex: target, count: 4 });
       state.message = `Wild +4! ${state.players[target].name} draws 4. Color is ${state.activeColor}.`;
       advance(state);
       break;
@@ -256,6 +287,7 @@ function resolveEffects(state, card, playerIndex) {
   state.phase = 'playing';
   state.drawnCard = null;
   state.pendingWildCardId = null;
+  return forceEvents;
 }
 
 function playCard(state, playerIndex, cardId, chosenColor = null) {
@@ -290,6 +322,7 @@ function playCard(state, playerIndex, cardId, chosenColor = null) {
 
   player.hand.splice(cardIndex, 1);
   state.discardPile.push(card);
+  const playedCard = { ...card };
 
   if (card.color === 'wild') {
     state.activeColor = chosenColor || pickBotColor(player.hand);
@@ -309,14 +342,21 @@ function playCard(state, playerIndex, cardId, chosenColor = null) {
     state.winner = player.name;
     state.phase = 'game_over';
     state.message = `${player.name} wins!`;
+    state.lastEvent = { kind: 'play', playerIndex, card: { ...playedCard }, win: true };
     state.seq++;
-    return { ok: true, win: true };
+    return { ok: true, win: true, event: state.lastEvent };
   }
 
-  resolveEffects(state, card, playerIndex);
+  const forceEvents = resolveEffects(state, playedCard, playerIndex);
   player.unoCalled = false;
+  state.lastEvent = {
+    kind: 'play',
+    playerIndex,
+    card: { ...playedCard },
+    forceDraws: forceEvents
+  };
   state.seq++;
-  return { ok: true };
+  return { ok: true, event: state.lastEvent };
 }
 
 function callUno(state, playerIndex) {
@@ -344,6 +384,7 @@ function applyUnoPenaltyIfNeeded(state) {
 function drawAction(state, playerIndex) {
   if (state.phase === 'game_over') return { ok: false, error: 'Game over' };
   if (state.currentPlayer !== playerIndex) return { ok: false, error: 'Not your turn' };
+  if (state.players[playerIndex]?.disconnected) return { ok: false, error: 'Disconnected' };
 
   if (state.phase === 'drawn_playable') {
     state.drawnCard = null;
@@ -351,8 +392,9 @@ function drawAction(state, playerIndex) {
     advance(state);
     applyForceDraws(state);
     state.message = `${state.players[playerIndex].name} ends turn`;
+    state.lastEvent = { kind: 'endTurn', playerIndex };
     state.seq++;
-    return { ok: true, ended: true };
+    return { ok: true, ended: true, event: state.lastEvent };
   }
 
   if (state.phase !== 'playing') return { ok: false, error: 'Cannot draw now' };
@@ -363,8 +405,9 @@ function drawAction(state, playerIndex) {
   if (state.deck.length === 0) {
     advance(state);
     state.message = 'No cards left — pass';
+    state.lastEvent = { kind: 'pass', playerIndex };
     state.seq++;
-    return { ok: true };
+    return { ok: true, event: state.lastEvent };
   }
 
   const card = state.deck.pop();
@@ -373,14 +416,11 @@ function drawAction(state, playerIndex) {
   state.drawnCard = card;
 
   if (canPlayCard(state, card, playerIndex)) {
-    if (player.isBot) {
-      const color = card.color === 'wild' ? pickBotColor(player.hand) : null;
-      return playCard(state, playerIndex, card.id, color);
-    }
     state.phase = 'drawn_playable';
     state.message = 'Playable card drawn — play it or click deck to end turn';
+    state.lastEvent = { kind: 'draw', playerIndex, count: 1, playable: true };
     state.seq++;
-    return { ok: true, drawnPlayable: true };
+    return { ok: true, drawnPlayable: true, event: state.lastEvent };
   }
 
   state.drawnCard = null;
@@ -388,8 +428,9 @@ function drawAction(state, playerIndex) {
   advance(state);
   applyForceDraws(state);
   state.message = `${player.name} draws a card`;
+  state.lastEvent = { kind: 'draw', playerIndex, count: 1, playable: false };
   state.seq++;
-  return { ok: true };
+  return { ok: true, event: state.lastEvent };
 }
 
 function chooseColor(state, playerIndex, color) {
@@ -406,49 +447,62 @@ function chooseColor(state, playerIndex, color) {
 
 /** Public view for one client (hides other hands) */
 function publicView(state, clientId) {
-  const youIndex = state.players.findIndex(p => p.clientId === clientId);
+  const youIndex = state.players.findIndex(p => p.clientId === clientId && !p.disconnected);
+  const fallbackYou = state.players.findIndex(p => p.clientId === clientId);
+  const you = youIndex >= 0 ? youIndex : fallbackYou;
   return {
     seq: state.seq,
+    playerCount: state.players.length,
     activeColor: state.activeColor,
     currentPlayer: state.currentPlayer,
     direction: state.direction,
     phase: state.phase,
     message: state.message,
-    youIndex,
+    youIndex: you,
     winner: state.winner,
     winnerIndex: state.winnerIndex ?? null,
     topCard: state.discardPile[state.discardPile.length - 1],
     deckCount: state.deck.length,
     drawnCardId: state.drawnCard?.id || null,
-    pendingWild: state.phase === 'awaiting_color' && state.currentPlayer === youIndex,
+    pendingWild: state.phase === 'awaiting_color' && state.currentPlayer === you,
+    lastEvent: state.lastEvent,
     players: state.players.map((p, i) => ({
       name: p.name,
-      isBot: p.isBot,
-      isHuman: p.isHuman,
+      isBot: false,
+      isHuman: true,
+      disconnected: !!p.disconnected,
       cardCount: p.hand.length,
       unoCalled: p.unoCalled,
       character: p.character,
-      hand: i === youIndex ? p.hand.map(c => ({ ...c })) : null
+      hand: i === you ? p.hand.map(c => ({ ...c })) : null
     }))
   };
 }
 
-function runBotTurn(state) {
-  const idx = state.currentPlayer;
-  const bot = state.players[idx];
-  if (!bot || !bot.isBot || state.phase === 'game_over') return { ok: false };
+function markDisconnected(state, clientId) {
+  const p = state.players.find(pl => pl.clientId === clientId);
+  if (!p) return { ok: false };
+  p.disconnected = true;
+  p.clientId = null;
+  p.name = p.name.startsWith('(Left)') ? p.name : `(Left) ${p.name}`;
 
-  if (bot.hand.length <= 2) bot.unoCalled = true;
-
-  const chosen = botChooseCard(state, bot.hand, idx);
-  if (chosen) {
-    const color = chosen.color === 'wild' ? pickBotColor(bot.hand) : null;
-    state.message = `${bot.name} plays a card`;
-    return playCard(state, idx, chosen.id, color);
+  if (checkSoleSurvivor(state)) {
+    state.seq++;
+    return { ok: true, win: true };
   }
 
-  state.message = `${bot.name} draws a card`;
-  return drawAction(state, idx);
+  if (state.currentPlayer === state.players.indexOf(p)) {
+    advance(state);
+  }
+  state.message = `${p.name.replace(/^\(Left\)\s*/, '')} left the game`;
+  state.lastEvent = { kind: 'leave', name: p.name };
+  state.seq++;
+  return { ok: true };
+}
+
+function runBotTurn() {
+  // Multiplayer is humans-only — no AI turns
+  return { ok: false };
 }
 
 module.exports = {
@@ -461,5 +515,8 @@ module.exports = {
   publicView,
   runBotTurn,
   canPlayCard,
-  getPlayableCards
+  getPlayableCards,
+  markDisconnected,
+  checkSoleSurvivor,
+  activeHumanCount
 };

@@ -78,47 +78,6 @@ function broadcastGame(room, event = null) {
   }
 }
 
-function delay(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
-
-async function runBotLoop(room) {
-  if (!room.game || room.status !== 'playing' || room.botBusy) return;
-  room.botBusy = true;
-  try {
-    while (room.game && room.status === 'playing' && room.game.phase !== 'game_over') {
-      const cur = room.game.players[room.game.currentPlayer];
-      if (!cur || !cur.isBot) break;
-
-      await delay(900 + Math.random() * 500);
-      if (!room.game || room.status !== 'playing') break;
-
-      const still = room.game.players[room.game.currentPlayer];
-      if (!still || !still.isBot) break;
-
-      engine.runBotTurn(room.game);
-      broadcastGame(room, { kind: 'bot' });
-
-      if (room.game.phase === 'game_over') {
-        const winner = room.game.winner;
-        const winnerIndex = room.game.winnerIndex;
-        broadcastRoom(room, {
-          type: 'gameOver',
-          winner,
-          winnerIndex
-        });
-        room.status = 'lobby';
-        room.game = null;
-        setTimeout(() => broadcastLobby(room), 800);
-        break;
-      }
-      await delay(350);
-    }
-  } finally {
-    room.botBusy = false;
-  }
-}
-
 function startGame(room) {
   if (room.status === 'playing') return { error: 'Game already in progress' };
   if (room.players.length < 2) {
@@ -134,7 +93,6 @@ function startGame(room) {
 
   room.game = engine.createGame(seats);
   room.status = 'playing';
-  room.botBusy = false;
 
   for (const p of room.players) {
     if (!p.ws) continue;
@@ -142,7 +100,6 @@ function startGame(room) {
     send(p.ws, { type: 'gameStart', view });
   }
 
-  setTimeout(() => runBotLoop(room), 400);
   return { ok: true };
 }
 
@@ -163,14 +120,8 @@ function leaveRoom(ws) {
   const leaving = room.players[idx];
 
   if (room.status === 'playing' && room.game) {
-    // Convert leaver to bot mid-game
-    const gp = room.game.players.find(p => p.clientId === meta.id);
-    if (gp) {
-      gp.isBot = true;
-      gp.isHuman = false;
-      gp.clientId = null;
-      gp.name = gp.name.startsWith('(AI)') ? gp.name : `(AI) ${gp.name}`;
-    }
+    // No bots — mark disconnected and continue with remaining humans
+    const result = engine.markDisconnected(room.game, meta.id);
     room.players.splice(idx, 1);
     leaving.ws = null;
 
@@ -183,9 +134,18 @@ function leaveRoom(ws) {
       room.hostId = room.players[0].id;
     }
 
-    broadcastLobby(room);
+    if (result?.win || room.game.phase === 'game_over') {
+      broadcastGame(room, room.game.lastEvent);
+      const winner = room.game.winner;
+      const winnerIndex = room.game.winnerIndex;
+      broadcastRoom(room, { type: 'gameOver', winner, winnerIndex });
+      room.status = 'lobby';
+      room.game = null;
+      setTimeout(() => broadcastLobby(room), 800);
+      return;
+    }
+
     broadcastGame(room, { kind: 'playerLeft', name: leaving.name });
-    setTimeout(() => runBotLoop(room), 200);
     return;
   }
 
@@ -200,14 +160,9 @@ function leaveRoom(ws) {
   broadcastLobby(room);
 }
 
-function seatIndexForClient(room, clientId) {
-  if (!room.game) return -1;
-  return room.game.players.findIndex(p => p.clientId === clientId);
-}
-
 function afterAction(room, result) {
   if (!result?.ok) return;
-  broadcastGame(room, { kind: 'action' });
+  broadcastGame(room, result.event || { kind: 'action' });
 
   if (room.game.phase === 'game_over') {
     const winner = room.game.winner;
@@ -220,10 +175,12 @@ function afterAction(room, result) {
     room.status = 'lobby';
     room.game = null;
     setTimeout(() => broadcastLobby(room), 800);
-    return;
   }
+}
 
-  setTimeout(() => runBotLoop(room), 200);
+function seatIndexForClient(room, clientId) {
+  if (!room.game) return -1;
+  return room.game.players.findIndex(p => p.clientId === clientId);
 }
 
 wss.on('connection', ws => {
@@ -268,8 +225,7 @@ function handleMessage(ws, meta, msg) {
         hostId: meta.id,
         status: 'lobby',
         players: [{ id: meta.id, name, avatar, ws }],
-        game: null,
-        botBusy: false
+        game: null
       };
       rooms.set(code, room);
       meta.roomCode = code;

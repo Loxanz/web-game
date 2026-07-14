@@ -24,12 +24,25 @@
   };
 
   function wsUrl() {
+    // Optional remote server after deploy, e.g.:
+    // window.UNO_WS_URL = 'wss://your-app.up.railway.app';
+    if (typeof window.UNO_WS_URL === 'string' && window.UNO_WS_URL.trim()) {
+      return window.UNO_WS_URL.trim().replace(/\/$/, '');
+    }
+
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     // Same host as page (works with npm start on :3000)
     // If opened via Live Server (:5500), fall back to localhost:3000
     const isLiveServer = location.port === '5500' || location.port === '5501';
+    if (location.hostname.endsWith('github.io')) {
+      return null;
+    }
     const host = isLiveServer ? `${location.hostname}:3000` : location.host;
     return `${proto}//${host}`;
+  }
+
+  function staticHostHint() {
+    return 'Online needs a game server. GitHub Pages is static-only and can’t host WebSockets. On your PC: npm start → open http://localhost:3000';
   }
 
   function setStatus(text, isError = false) {
@@ -52,7 +65,11 @@
     if (nameInput && window.CharacterSystem) {
       nameInput.value = CharacterSystem.getPlayerName();
     }
-    setStatus('');
+    if (location.hostname.endsWith('github.io') && !window.UNO_WS_URL) {
+      setStatus(staticHostHint(), true);
+    } else {
+      setStatus('');
+    }
   }
 
   function showLobby() {
@@ -96,7 +113,7 @@
     if (data.youAreHost) {
       setLobbyHint(data.players.length < 2
         ? 'Waiting for at least 1 more player…'
-        : 'Ready — empty seats fill with AI when you start.');
+        : `Ready to start with ${data.players.length} players (humans only).`);
     } else {
       setLobbyHint('Waiting for host to start…');
     }
@@ -118,19 +135,26 @@
         return;
       }
 
+      const url = wsUrl();
+      if (!url) {
+        setStatus(staticHostHint(), true);
+        reject(new Error('no-server'));
+        return;
+      }
+
       intentionalClose = false;
       setStatus('Connecting…');
 
       try {
-        ws = new WebSocket(wsUrl());
+        ws = new WebSocket(url);
       } catch (err) {
-        setStatus('Cannot connect. Start the server with npm start', true);
+        setStatus(staticHostHint(), true);
         reject(err);
         return;
       }
 
       const timeout = setTimeout(() => {
-        setStatus('Connection timed out. Run npm start on port 3000', true);
+        setStatus('Connection timed out. Run npm start and open http://localhost:3000', true);
         try { ws.close(); } catch (_) { /* */ }
         reject(new Error('timeout'));
       }, 5000);
@@ -154,14 +178,22 @@
 
       ws.onerror = () => {
         clearTimeout(timeout);
-        setStatus('Connection failed. Open http://localhost:3000 after npm start', true);
+        if (location.hostname.endsWith('github.io')) {
+          setStatus(staticHostHint(), true);
+        } else {
+          setStatus('Connection failed. Run npm start and open http://localhost:3000', true);
+        }
       };
 
       ws.onclose = () => {
         connected = false;
         clearTimeout(timeout);
         if (!intentionalClose) {
-          setStatus('Disconnected from server', true);
+          if (location.hostname.endsWith('github.io') && !window.UNO_WS_URL) {
+            setStatus(staticHostHint(), true);
+          } else {
+            setStatus('Disconnected from server', true);
+          }
         }
         ws = null;
       };
@@ -182,7 +214,7 @@
       case 'gameStart':
       case 'state':
         if (msg.view && window.OnlineGame) {
-          OnlineGame.applyView(msg.view);
+          OnlineGame.applyView(msg.view, msg.event || null);
         }
         break;
 

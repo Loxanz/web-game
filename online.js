@@ -23,6 +23,16 @@
     joinCode: () => document.getElementById('online-join-code')
   };
 
+  function isStaticHost() {
+    const h = location.hostname;
+    return (
+      h.endsWith('github.io')
+      || h.endsWith('vercel.app')
+      || h.endsWith('netlify.app')
+      || h.endsWith('pages.dev')
+    );
+  }
+
   function wsUrl() {
     // Optional remote server after deploy, e.g.:
     // window.UNO_WS_URL = 'wss://your-app.up.railway.app';
@@ -34,7 +44,7 @@
     // Same host as page (works with npm start on :3000)
     // If opened via Live Server (:5500), fall back to localhost:3000
     const isLiveServer = location.port === '5500' || location.port === '5501';
-    if (location.hostname.endsWith('github.io')) {
+    if (isStaticHost()) {
       return null;
     }
     const host = isLiveServer ? `${location.hostname}:3000` : location.host;
@@ -42,7 +52,7 @@
   }
 
   function staticHostHint() {
-    return 'Online needs a game server. GitHub Pages is static-only and can’t host WebSockets. On your PC: npm start → open http://localhost:3000';
+    return 'This site is static-only (Vercel can’t host WebSockets). Deploy the Node server (npm start) to Railway/Render, then set window.UNO_WS_URL in config.js to your wss://… URL. Or play locally: npm start → http://localhost:3000';
   }
 
   function setStatus(text, isError = false) {
@@ -65,7 +75,7 @@
     if (nameInput && window.CharacterSystem) {
       nameInput.value = CharacterSystem.getPlayerName();
     }
-    if (location.hostname.endsWith('github.io') && !window.UNO_WS_URL) {
+    if (isStaticHost() && !window.UNO_WS_URL) {
       setStatus(staticHostHint(), true);
     } else {
       setStatus('');
@@ -178,8 +188,10 @@
 
       ws.onerror = () => {
         clearTimeout(timeout);
-        if (location.hostname.endsWith('github.io')) {
+        if (isStaticHost() && !window.UNO_WS_URL) {
           setStatus(staticHostHint(), true);
+        } else if (isStaticHost()) {
+          setStatus('Could not reach game server. Check window.UNO_WS_URL in config.js (use wss://…).', true);
         } else {
           setStatus('Connection failed. Run npm start and open http://localhost:3000', true);
         }
@@ -189,8 +201,10 @@
         connected = false;
         clearTimeout(timeout);
         if (!intentionalClose) {
-          if (location.hostname.endsWith('github.io') && !window.UNO_WS_URL) {
+          if (isStaticHost() && !window.UNO_WS_URL) {
             setStatus(staticHostHint(), true);
+          } else if (isStaticHost()) {
+            setStatus('Disconnected — game server unreachable. Check UNO_WS_URL / that the server is running.', true);
           } else {
             setStatus('Disconnected from server', true);
           }

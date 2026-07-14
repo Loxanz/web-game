@@ -444,8 +444,6 @@ async function handleHumanDrawClick() {
 
   if (onlineMode) {
     if (state.phase !== 'playing' && state.phase !== 'drawn_playable') return;
-    humanActionLock = true;
-    // Send first so opponents see the move immediately; animate locally in parallel
     if (window.OnlineClient) window.OnlineClient.sendDraw();
     if (state.phase === 'playing') void animateHumanDrawOnline();
     return;
@@ -1000,9 +998,12 @@ async function handleHumanPlay(cardId) {
   if (sourceEl) sourceEl.classList.add('card-leaving');
 
   if (onlineMode) {
-    // Network first — don't wait for flight anim before opponents get the update
-    if (window.OnlineClient) window.OnlineClient.sendPlay(cardId, null);
-    void animatePlayToDiscard(card, sourceEl, ONLINE_FLIGHT_MS);
+    try {
+      if (window.OnlineClient) window.OnlineClient.sendPlay(cardId, null);
+      void animatePlayToDiscard(card, sourceEl, ONLINE_FLIGHT_MS);
+    } finally {
+      humanActionLock = false;
+    }
     return;
   }
 
@@ -1034,9 +1035,13 @@ async function handleColorChoice(color) {
   if (sourceEl) sourceEl.classList.add('card-leaving');
 
   if (onlineMode) {
-    state.phase = 'playing';
-    if (window.OnlineClient) window.OnlineClient.sendPlay(card.id, color);
-    void animatePlayToDiscard(card, sourceEl, ONLINE_FLIGHT_MS);
+    try {
+      state.phase = 'playing';
+      if (window.OnlineClient) window.OnlineClient.sendPlay(card.id, color);
+      void animatePlayToDiscard(card, sourceEl, ONLINE_FLIGHT_MS);
+    } finally {
+      humanActionLock = false;
+    }
     return;
   }
 

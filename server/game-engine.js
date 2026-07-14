@@ -1,6 +1,8 @@
 /**
- * Server-side UNO game engine (authoritative, no DOM)
+ * UNO game engine (Node + browser). Scoped so it does not collide with game.js globals.
  */
+(function (root) {
+'use strict';
 
 const COLORS = ['red', 'yellow', 'green', 'blue'];
 const BOT_NAMES = ['Alex', 'Sam', 'Jordan'];
@@ -524,6 +526,5 @@ const UnoEngineAPI = {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = UnoEngineAPI;
 }
-if (typeof window !== 'undefined') {
-  window.UnoEngine = UnoEngineAPI;
-}
+root.UnoEngine = UnoEngineAPI;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
